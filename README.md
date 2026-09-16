@@ -23,10 +23,12 @@ Backend para el registro de solicitantes de crédito y su ficha financiera. Lo u
 
 ## Endpoints disponibles
 
-Base local: `http://localhost:8080` 
+Base local: `http://localhost:8080` — Producción: `https://scorecrediticiobackend.onrender.com`
+
+> Nota: al abrir la URL base en el navegador verás `404 Ruta no encontrada`. Es normal, la API no tiene interfaz web. Usa Postman o el frontend. 
 
 ### 1. Registrar solicitante
-`POST /api/solicitantes`
+`POST https://scorecrediticiobackend.onrender.com/api/solicitantes`
 ```json
 {
   "tipoDocumento": "CC",
@@ -42,7 +44,7 @@ Base local: `http://localhost:8080`
 * `409` -> ya existe ese `tipoDocumento + numeroDocumento`.
 
 ### 2. Registrar perfil financiero
-`POST /api/solicitantes/{solicitanteId}/perfil-financiero`
+`POST https://scorecrediticiobackend.onrender.com/api/solicitantes/{solicitanteId}/perfil-financiero`
 ```json
 { "ingresos": 2500000.00, "egresos": 1200000.00 }
 ```
@@ -59,7 +61,7 @@ Flujo secuencial, misma página, sin pedir el `id` al asesor:
 2. `POST /api/solicitantes` -> con el `id` de la respuesta habilitas el Form 2.
 3. `POST /api/solicitantes/{id}/perfil-financiero` con ese `id` en memoria.
 ```js
-const api = import.meta.env.VITE_API_URL; // URL del backend en Render
+const api = import.meta.env.VITE_API_URL; // = https://scorecrediticiobackend.onrender.com
 const sol = await fetch(`${api}/api/solicitantes`, {
   method: 'POST', headers: {'Content-Type':'application/json'},
   body: JSON.stringify(datosSolicitante)
@@ -69,6 +71,22 @@ await fetch(`${api}/api/solicitantes/${sol.id}/perfil-financiero`, {
   body: JSON.stringify({ ingresos, egresos })
 });
 ```
+
+## Cómo conectarse al backend (frontend y pruebas)
+
+**Producción:** `https://scorecrediticiobackend.onrender.com`
+
+1. **Postman:** crea una variable `baseUrl` con ese valor. Prueba:
+   * `POST {{baseUrl}}/api/solicitantes` con el JSON del punto 1 -> esperas `201` y un `id`.
+   * `POST {{baseUrl}}/api/solicitantes/{id}/perfil-financiero` -> esperas `201`.
+   * En plan Free la primera petición puede tardar ~50s (el servicio se duerme). Reintenta si da timeout.
+2. **React (Vite) en Vercel:** define la variable de entorno:
+   ```
+   VITE_API_URL=https://scorecrediticiobackend.onrender.com
+   ```
+   y usa `${import.meta.env.VITE_API_URL}/api/...` como en el ejemplo de arriba. No pongas la URL fija en el código.
+3. **CORS:** ya permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app`. Si el navegador bloquea, revisa que `FRONTEND_URL` en Render tenga tu URL final de Vercel.
+4. **BD:** el frontend nunca se conecta directo a Postgres, solo a la API. La BD la gestiona el backend en Render.
 
 ## Tablas
 
