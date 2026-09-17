@@ -22,6 +22,8 @@ public class PerfilFinancieroMapper {
         PerfilFinancieroResponseDTO dto = new PerfilFinancieroResponseDTO();
         dto.setId(perfil.getId());
         dto.setSolicitanteId(perfil.getSolicitante().getId());
+        dto.setTipoDocumento(perfil.getSolicitante().getTipoDocumento());
+        dto.setNumeroDocumento(perfil.getSolicitante().getNumeroDocumento());
         dto.setIngresos(perfil.getIngresos());
         dto.setEgresos(perfil.getEgresos());
         dto.setIngresoNetoDisponible(perfil.getIngresoNetoDisponible());

@@ -2,9 +2,13 @@ package com.udea.ScoreCrediticio.DTOs.Response;
 
 import java.math.BigDecimal;
 
+import com.udea.ScoreCrediticio.Model.TipoDocumento;
+
 public class PerfilFinancieroResponseDTO {
     private Long id;
     private Long solicitanteId;
+    private TipoDocumento tipoDocumento;
+    private String numeroDocumento;
     private BigDecimal ingresos;
     private BigDecimal egresos;
     private BigDecimal ingresoNetoDisponible;
@@ -23,6 +27,22 @@ public class PerfilFinancieroResponseDTO {
 
     public void setSolicitanteId(Long solicitanteId) {
         this.solicitanteId = solicitanteId;
+    }
+
+    public TipoDocumento getTipoDocumento() {
+        return tipoDocumento;
+    }
+
+    public void setTipoDocumento(TipoDocumento tipoDocumento) {
+        this.tipoDocumento = tipoDocumento;
+    }
+
+    public String getNumeroDocumento() {
+        return numeroDocumento;
+    }
+
+    public void setNumeroDocumento(String numeroDocumento) {
+        this.numeroDocumento = numeroDocumento;
     }
 
     public BigDecimal getIngresos() {

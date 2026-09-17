@@ -6,12 +6,15 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 public class SolicitanteRequestDTO {
     @NotNull(message = "El tipo de documento es obligatorio")
     private TipoDocumento tipoDocumento;
 
     @NotBlank(message = "El número de documento es obligatorio")
+    @Size(max = 20, message = "El número de documento no debe superar los 20 caracteres")
+    @Pattern(regexp = "^[A-Za-z0-9-]+$", message = "El número de documento tiene un formato inválido")
     private String numeroDocumento;
 
     @NotBlank(message = "El nombre es obligatorio")

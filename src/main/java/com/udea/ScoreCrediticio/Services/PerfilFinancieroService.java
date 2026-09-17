@@ -10,6 +10,7 @@ import com.udea.ScoreCrediticio.DTOs.Response.PerfilFinancieroResponseDTO;
 import com.udea.ScoreCrediticio.Exceptions.DuplicateResourceException;
 import com.udea.ScoreCrediticio.Exceptions.ResourceNotFoundException;
 import com.udea.ScoreCrediticio.Mapper.PerfilFinancieroMapper;
+import com.udea.ScoreCrediticio.Model.TipoDocumento;
 import com.udea.ScoreCrediticio.Model.PerfilFinanciero;
 import com.udea.ScoreCrediticio.Model.Solicitante;
 
@@ -28,12 +29,11 @@ public class PerfilFinancieroService {
     }
 
     @Transactional
-    public PerfilFinancieroResponseDTO registrarPerfil(Long solicitanteId, PerfilFinancieroRequestDTO dto) {
-        Solicitante solicitante = solicitanteDAO.findById(solicitanteId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Solicitante con id " + solicitanteId + " no encontrado"));
+    public PerfilFinancieroResponseDTO registrarPerfil(PerfilFinancieroRequestDTO dto) {
+        Solicitante solicitante = buscarSolicitantePorDocumento(
+                dto.getTipoDocumento(), dto.getNumeroDocumento());
 
-        if (perfilFinancieroDAO.findBySolicitanteId(solicitanteId).isPresent()) {
+        if (perfilFinancieroDAO.findBySolicitanteId(solicitante.getId()).isPresent()) {
             throw new DuplicateResourceException(
                     "El solicitante ya tiene un perfil financiero registrado");
         }
@@ -42,5 +42,23 @@ public class PerfilFinancieroService {
         PerfilFinanciero guardado = perfilFinancieroDAO.save(perfil);
 
         return perfilFinancieroMapper.toResponseDto(guardado);
+    }
+
+    @Transactional(readOnly = true)
+    public PerfilFinancieroResponseDTO consultarPorDocumento(TipoDocumento tipoDocumento, String numeroDocumento) {
+        Solicitante solicitante = buscarSolicitantePorDocumento(tipoDocumento, numeroDocumento);
+
+        PerfilFinanciero perfil = perfilFinancieroDAO.findBySolicitanteId(solicitante.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "El solicitante con documento " + tipoDocumento + " " + numeroDocumento
+                                + " no tiene perfil financiero registrado"));
+
+        return perfilFinancieroMapper.toResponseDto(perfil);
+    }
+
+    private Solicitante buscarSolicitantePorDocumento(TipoDocumento tipoDocumento, String numeroDocumento) {
+        return solicitanteDAO.findByTipoDocumentoAndNumeroDocumento(tipoDocumento, numeroDocumento)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Solicitante con documento " + tipoDocumento + " " + numeroDocumento + " no encontrado"));
     }
 }

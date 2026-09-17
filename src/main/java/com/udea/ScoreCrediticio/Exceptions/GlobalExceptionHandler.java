@@ -8,8 +8,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -56,6 +59,44 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST, "Cuerpo de la solicitud malformado o tipo de dato inválido");
         problem.setTitle("Solicitud malformada");
+        return problem;
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        Map<String, String> errors = new HashMap<>();
+        errors.put(ex.getName(), "Valor inválido: " + ex.getValue());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "La solicitud contiene datos inválidos");
+        problem.setTitle("Error de validación");
+        problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ProblemDetail handleMissingParam(MissingServletRequestParameterException ex) {
+        Map<String, String> errors = new HashMap<>();
+        errors.put(ex.getParameterName(), "El parámetro es obligatorio");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "La solicitud contiene datos inválidos");
+        problem.setTitle("Error de validación");
+        problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ProblemDetail handleMethodValidation(HandlerMethodValidationException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getParameterValidationResults().forEach(result ->
+                result.getResolvableErrors().forEach(error -> {
+                    String field = result.getMethodParameter().getParameterName();
+                    String message = error.getDefaultMessage();
+                    errors.put(field != null ? field : "parametro", message != null ? message : "Valor inválido");
+                }));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "La solicitud contiene datos inválidos");
+        problem.setTitle("Error de validación");
+        problem.setProperty("errors", errors);
         return problem;
     }
 
