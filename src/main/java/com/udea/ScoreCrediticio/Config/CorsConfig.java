@@ -21,6 +21,7 @@ public class CorsConfig implements WebMvcConfigurer {
             patterns = new String[]{
                     "http://localhost:3000",
                     "http://localhost:5173",
+                    "http://localhost:8443",
                     "https://*.vercel.app",
                     frontendUrl.trim()
             };
@@ -28,6 +29,7 @@ public class CorsConfig implements WebMvcConfigurer {
             patterns = new String[]{
                     "http://localhost:3000",
                     "http://localhost:5173",
+                    "http://localhost:8443",
                     "https://*.vercel.app"
             };
         }
