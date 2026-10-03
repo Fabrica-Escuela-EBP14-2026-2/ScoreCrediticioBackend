@@ -5,27 +5,29 @@ Backend para el registro de solicitantes de crédito y su ficha financiera. Cada
 ## Stack tecnológico
 
 * Java 25 + Spring Boot 4.1.1 (WebMVC, Data JPA, Validation)
-* PostgreSQL + Hibernate (`ddl-auto: update`)
+* Seguridad: Spring Security + JWT (`io.jsonwebtoken` 0.13.0) + BCrypt
+* PostgreSQL + Hibernate (`ddl-auto: update` en local, `validate` en producción)
 * Gradle (wrapper incluido) + Dockerfile multistage para Render
 * Despliegue: Render (Web Service Docker + Postgres). Frontend: React en Vercel.
 
 ## Estructura de carpetas (`src/main/java/com/udea/ScoreCrediticio/`)
 
-* `Model/`: entidades JPA. `Solicitante`, `PerfilFinanciero` (relación 1 a 1) y enum `TipoDocumento` (`CC, CE, PASAPORTE, PPT, TI`).
-* `DTOs/Request/`: lo que recibe la API. `SolicitanteRequestDTO` (con `@NotBlank/@Email`, validan campos obligatorios), `PerfilFinancieroRequestDTO` (`ingresos, egresos`).
-* `DTOs/Response/`: lo que devuelve la API. `SolicitanteResponseDTO` (`id + datos`), `PerfilFinancieroResponseDTO` (`id, solicitanteId, ingresos, egresos, ingresoNetoDisponible`).
+* `Model/`: entidades JPA. `Solicitante`, `PerfilFinanciero` (relación 1 a 1), `Usuario` y los enums `TipoDocumento` (`CC, CE, PASAPORTE, PPT, TI`) y `TipoUsuario` (`ANALISTA, ADMINISTRADOR`).
+* `DTOs/Request/`: lo que recibe la API. `SolicitanteRequestDTO` (con `@NotBlank/@Email`, validan campos obligatorios), `PerfilFinancieroRequestDTO` (`ingresos, egresos`) y `LoginRequestDTO` (`email, password`).
+* `DTOs/Response/`: lo que devuelve la API. `SolicitanteResponseDTO` (`id + datos`), `PerfilFinancieroResponseDTO` (`id, solicitanteId, ingresos, egresos, ingresoNetoDisponible`) y `LoginResponseDTO` (`token, tipoToken, expiraEn, email, rol`).
 * `Mapper/`: convierte `RequestDTO -> Entity` y `Entity -> ResponseDTO`. Sin lógica de negocio.
 * `DAOs/`: repositorios Spring Data. `findByTipoDocumentoAndNumeroDocumento` (duplicados) y `findBySolicitanteId` (un perfil por solicitante).
-* `Services/`: reglas de negocio. `registrarSolicitante` (rechaza duplicado por tipo+numero con `409`) y `registrarPerfil`/`consultarPorDocumento` (resuelven el solicitante por documento: `404` si no existe, `409` si ya tiene perfil).
-* `Controller/`: `SolicitanteController` (`POST /api/solicitantes`) y `PerfilFinancieroController` (`POST + GET /api/perfil-financiero` por documento). Valida con `@Valid/@Validated`.
-* `Config/`: `CorsConfig`. Permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app` (+ `FRONTEND_URL` en Render).
-* `Exceptions/`: `DuplicateResourceException`, `ResourceNotFoundException` y `GlobalExceptionHandler` (`400` validación, `404` no encontrado, `409` duplicado).
+* `Services/`: reglas de negocio. `registrarSolicitante` (rechaza duplicado por tipo+numero con `409`), `registrarPerfil`/`consultarPorDocumento` (resuelven el solicitante por documento: `404` si no existe, `409` si ya tiene perfil) y `AuthService` (valida credenciales con BCrypt y emite el JWT).
+* `Controller/`: `SolicitanteController` (`POST /api/solicitantes`), `PerfilFinancieroController` (`POST + GET /api/perfil-financiero` por documento) y `AuthController` (`POST /api/auth/login`). Valida con `@Valid/@Validated`.
+* `Config/`: `CorsConfig` (permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app`, + `FRONTEND_URL` en Render) y `DataInitializer` (crea el admin y el analista semilla si no existen).
+* `Security/`: `JwtService` (firma y lee tokens), `JwtAuthenticationFilter` (lee el header Bearer y autentica la petición), `SecurityConfig` (reglas por rol + bean BCrypt), `RestAuthenticationEntryPoint` (`401`) y `RestAccessDeniedHandler` (`403`).
+* `Exceptions/`: `DuplicateResourceException`, `ResourceNotFoundException`, `CredencialesInvalidasException` y `GlobalExceptionHandler` (`400` validación, `401` credenciales, `404` no encontrado, `409` duplicado).
 
 ## Endpoints disponibles
 
 Base local: `http://localhost:8080` — Producción: `https://scorecrediticiobackend.onrender.com`
 
-> Nota: al abrir la URL base en el navegador verás `404 Ruta no encontrada`. Es normal, la API no tiene interfaz web. Usa Postman o el frontend. 
+> Nota: la API no tiene interfaz web. Todas las rutas (excepto `POST /api/auth/login`) exigen el header `Authorization: Bearer <token>`; sin un token válido responden `401`. Usa Postman o el frontend.
 
 ### 1. Registrar solicitante
 `POST https://scorecrediticiobackend.onrender.com/api/solicitantes`
@@ -64,7 +66,55 @@ Base local: `http://localhost:8080` — Producción: `https://scorecrediticiobac
 * `400` -> falta un query param o `tipoDocumento` inválido (`CC, CE, PASAPORTE, PPT, TI`).
 * `404` -> solicitante no existe o aún no tiene perfil financiero registrado.
 
+### 4. Autenticación
+
+> La única ruta pública es `POST /api/auth/login`. El resto responde `401` sin token válido y `403` si el rol no tiene permiso.
+
+### Iniciar sesión
+
+`POST /api/auth/login`
+```json
+{
+  "email": "admin@score.local",
+  "password": "Admin123*"
+}
+```
+* `200` -> `{ token, tipoToken: "Bearer", expiraEn, email, rol }`. `expiraEn` es la vigencia en milisegundos (1 hora).
+* `400` -> email/contraseña vacíos o email con formato inválido.
+* `401` -> `Usuario o contraseña incorrectos. Por favor intente nuevamente` (el mismo mensaje si el usuario no existe o si la contraseña es incorrecta).
+
+En las demás peticiones envía el token en el header:
+
+```
+Authorization: Bearer <token>
+```
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@score.local","password":"Admin123*"}'
+```
+
+### Flujo del token
+
+1. El login valida el email y compara la contraseña con BCrypt (`passwordEncoder.matches`).
+2. Si son válidas, `JwtService` firma un token HS256 con `email` (subject), `rol` (claim) y expiración de 1 hora.
+3. El frontend guarda el token y lo envía en cada petición: `Authorization: Bearer <token>`.
+4. `JwtAuthenticationFilter` valida la firma y vigencia, y autentica la petición con la autoridad `ROLE_<rol>`; `SecurityConfig` decide si la ruta está permitida.
+
+### Usuarios semilla
+
+Al arrancar, `Config/DataInitializer` crea el administrador y el analista **solo si su email no existe**: no se duplican ni se actualizan en arranques posteriores. Las credenciales se toman de `ADMIN_EMAIL`/`ADMIN_PASSWORD` y `ANALISTA_EMAIL`/`ANALISTA_PASSWORD`.
+
+### Roles
+
+* `ANALISTA`: podrá usar los módulos de negocio (solicitantes, perfil financiero).
+* `ADMINISTRADOR`: todo lo anterior + módulos de administración (`/api/variables/**`, `/api/formula/**`, `/api/rangos/**`).
+
+
 ## Cómo usarlo en el frontend (lógica de negocio)
+
+Primero inicia sesión en `POST /api/auth/login`, guarda el `token` y envíalo como `Authorization: Bearer <token>` en cada petición. Usa el `rol` devuelto para mostrar u ocultar los módulos de administración (solo `ADMINISTRADOR`) y redirige al login cuando recibas `401`.
 
 Dos registros independientes: cada formulario se identifica por `tipoDocumento + numeroDocumento`:
 
@@ -73,16 +123,28 @@ Dos registros independientes: cada formulario se identifica por `tipoDocumento +
 3. Consulta -> `GET /api/perfil-financiero?tipoDocumento=...&numeroDocumento=...`.
 ```js
 const api = import.meta.env.VITE_API_URL; // = https://scorecrediticiobackend.onrender.com
-await fetch(`${api}/api/solicitantes`, {
+
+const sesion = await fetch(`${api}/api/auth/login`, {
   method: 'POST', headers: {'Content-Type':'application/json'},
+  body: JSON.stringify({ email, password })
+}).then(r => r.json());
+
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${sesion.token}`
+};
+
+await fetch(`${api}/api/solicitantes`, {
+  method: 'POST', headers,
   body: JSON.stringify(datosSolicitante)
 });
 await fetch(`${api}/api/perfil-financiero`, {
-  method: 'POST', headers: {'Content-Type':'application/json'},
+  method: 'POST', headers,
   body: JSON.stringify({ tipoDocumento, numeroDocumento, ingresos, egresos })
 });
 const ficha = await fetch(
-  `${api}/api/perfil-financiero?tipoDocumento=${tipoDocumento}&numeroDocumento=${numeroDocumento}`
+  `${api}/api/perfil-financiero?tipoDocumento=${tipoDocumento}&numeroDocumento=${numeroDocumento}`,
+  { headers }
 ).then(r => r.json());
 ```
 
@@ -91,9 +153,11 @@ const ficha = await fetch(
 **Producción:** `https://scorecrediticiobackend.onrender.com`
 
 1. **Postman:** crea una variable `baseUrl` con ese valor. Prueba:
+   * `POST {{baseUrl}}/api/auth/login` con las credenciales reales (en producción son las creadas en el primer arranque, no necesariamente las de desarrollo `admin@score.local`/`Admin123*`) -> esperas `200` con `token` y `rol`. Guarda el token en una variable de colección y configúrala como Bearer Token.
    * `POST {{baseUrl}}/api/solicitantes` con el JSON del punto 1 -> esperas `201` y un `id`.
    * `POST {{baseUrl}}/api/perfil-financiero` con `{tipoDocumento, numeroDocumento, ingresos, egresos}` -> esperas `201`.
    * `GET {{baseUrl}}/api/perfil-financiero?tipoDocumento=CC&numeroDocumento=12345678` -> esperas `200` con la ficha.
+   * Sin token (o con token vencido) estas rutas responden `401`; con rol `ANALISTA` en rutas admin responden `403`.
    * En plan Free la primera petición puede tardar ~50s (el servicio se duerme). Reintenta si da timeout.
 2. **React (Vite) en Vercel:** define la variable de entorno:
    ```
@@ -103,7 +167,27 @@ const ficha = await fetch(
 3. **CORS:** ya permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app`. Si el navegador bloquea, revisa que `FRONTEND_URL` en Render tenga tu URL final de Vercel.
 4. **BD:** el frontend nunca se conecta directo a Postgres, solo a la API. La BD la gestiona el backend en Render.
 
+## Pruebas
+
+```bash
+./gradlew test
+```
+
+* `Security/JwtServiceTest`: genera/lee tokens y rechaza tokens vencidos, alterados o firmados con otra clave.
+* `Services/AuthServiceTest`: login correcto, email inexistente y contraseña incorrecta (con BCrypt real y `UsuarioDAO` simulado).
+* `AutenticacionIntegrationTest`: login real (`200` con token y rol), credenciales inválidas (`401` con el mensaje exacto), ruta protegida sin token (`401`), analista en rutas admin (`403`), admin en rutas admin (pasa el guard) y analista en endpoints de negocio (permitido).
+* Los tests usan H2 en memoria (`src/test/resources/application.properties`), por lo que no requieren PostgreSQL local.
+
 ## Tablas
+
+**`usuario`**
+| columna | tipo | nota |
+|---|---|---|
+| id | bigint (SEQUENCE `hibernate_sequence`) | PK |
+| email | varchar(255) | UNIQUE NOT NULL, identificador del login |
+| password | varchar(255) | hash BCrypt, nunca texto plano |
+| tipo_usuario | varchar(20) | `ANALISTA` o `ADMINISTRADOR` (`@Enumerated(EnumType.STRING)`) |
+
 
 **`solicitante`**
 | columna | tipo | nota |

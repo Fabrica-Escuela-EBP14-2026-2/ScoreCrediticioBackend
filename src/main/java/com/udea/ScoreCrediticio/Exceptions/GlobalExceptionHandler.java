@@ -25,6 +25,13 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(CredencialesInvalidasException.class)
+    public ProblemDetail handleCredencialesInvalidas(CredencialesInvalidasException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Autenticación fallida");
+        return problem;
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
