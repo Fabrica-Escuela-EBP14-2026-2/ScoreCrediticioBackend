@@ -3,6 +3,7 @@ package com.udea.ScoreCrediticio.Exceptions;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -22,6 +23,24 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleDuplicate(DuplicateResourceException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Recurso duplicado");
+        return problem;
+    }
+
+    @ExceptionHandler(PesoTotalExcedeLimiteException.class)
+    public ProblemDetail handlePesoTotal(PesoTotalExcedeLimiteException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Suma de pesos excede el 100%");
+        problem.setProperty("pesoTotalActual", ex.getPesoTotalActual());
+        problem.setProperty("pesoSolicitado", ex.getPesoSolicitado());
+        problem.setProperty("pesoTotalResultante", ex.getPesoTotalResultante());
+        return problem;
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "No se pudo registrar la variable por un conflicto de concurrencia. Intente nuevamente");
+        problem.setTitle("Conflicto de concurrencia");
         return problem;
     }
 
