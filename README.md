@@ -13,13 +13,13 @@ Backend para el registro de solicitantes de crédito y su ficha financiera, más
 ## Estructura de carpetas (`src/main/java/com/udea/ScoreCrediticio/`)
 
 * `Model/`: entidades JPA. `Solicitante`, `PerfilFinanciero` (relación 1 a 1), `Usuario`, `VariableRiesgo` y los enums `TipoDocumento` (`CC, CE, PASAPORTE, PPT, TI`), `TipoUsuario` (`ANALISTA, ADMINISTRADOR`), `TipoDatoVariable` (`NUMERICO, PORCENTAJE, CATEGORICO`) y `EstadoVariable` (`Activa, Inactiva`).
-* `DTOs/Request/`: lo que recibe la API. `SolicitanteRequestDTO` (con `@NotBlank/@Email`, validan campos obligatorios), `PerfilFinancieroRequestDTO` (`ingresos, egresos`), `LoginRequestDTO` (`email, password`) y `VariableRiesgoRequestDTO` (`nombre, tipoDato, peso`; el peso debe ser `> 0` y `<= 100`).
+* `DTOs/Request/`: lo que recibe la API. `SolicitanteRequestDTO` (con `@NotBlank/@Email`, validan campos obligatorios), `PerfilFinancieroRequestDTO` (`ingresos, egresos`), `LoginRequestDTO` (`email, password`), `VariableRiesgoRequestDTO` (`nombre, tipoDato, peso`; el peso debe ser `> 0` y `<= 100`) y `VariableEstadoRequestDTO` (`estado`, obligatorio, para activar/inactivar).
 * `DTOs/Response/`: lo que devuelve la API. `SolicitanteResponseDTO` (`id + datos`), `PerfilFinancieroResponseDTO` (`id, solicitanteId, ingresos, egresos, ingresoNetoDisponible`), `LoginResponseDTO` (`token, tipoToken, expiraEn, email, rol`) y `VariableRiesgoResponseDTO` (`id, nombre, tipoDato, peso, estado, fechaRegistro`).
 * `Mapper/`: convierte `RequestDTO -> Entity` y `Entity -> ResponseDTO`. Sin lógica de negocio.
 * `DAOs/`: repositorios Spring Data. `findByTipoDocumentoAndNumeroDocumento` (duplicados), `findBySolicitanteId` (un perfil por solicitante), `existsByNombreIgnoreCase` (variables de riesgo) y `sumarPesosPorEstado` (total de pesos activos para validar el 100%).
-* `Services/`: reglas de negocio. `registrarSolicitante` (rechaza duplicado por tipo+numero con `409`), `registrarPerfil`/`consultarPorDocumento` (resuelven el solicitante por documento: `404` si no existe, `409` si ya tiene perfil), `AuthService` (valida credenciales con BCrypt y emite el JWT) y `VariableRiesgoService` (`registrarVariable` rechaza nombres duplicados y no deja que la suma de los pesos activos supere el 100%; la transacción va en `SERIALIZABLE` para que dos altas concurrentes no se cuelguen entre sí).
-* `Controller/`: `SolicitanteController` (`POST /api/solicitantes`), `PerfilFinancieroController` (`POST + GET /api/perfil-financiero` por documento), `AuthController` (`POST /api/auth/login`) y `VariableRiesgoController` (`POST + GET /api/variables`). Valida con `@Valid/@Validated`.
-* `Config/`: `CorsConfig` (permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app`, + `FRONTEND_URL` en Render) y `DataInitializer` (crea el admin y el analista semilla si no existen).
+* `Services/`: reglas de negocio. `registrarSolicitante` (rechaza duplicado por tipo+numero con `409`), `registrarPerfil`/`consultarPorDocumento` (resuelven el solicitante por documento: `404` si no existe, `409` si ya tiene perfil), `AuthService` (valida credenciales con BCrypt y emite el JWT) y `VariableRiesgoService` (`registrarVariable` rechaza nombres duplicados y no deja que la suma de los pesos activos supere el 100%; `cambiarEstado` activa/inactiva sin borrar y revalida ese 100% al reactivar; la transacción va en `SERIALIZABLE` para que dos altas o dos reactivaciones concurrentes no se cuelguen entre sí).
+* `Controller/`: `SolicitanteController` (`POST /api/solicitantes`), `PerfilFinancieroController` (`POST + GET /api/perfil-financiero` por documento), `AuthController` (`POST /api/auth/login`) y `VariableRiesgoController` (`POST + GET /api/variables`, y `PATCH /api/variables/{id}/estado`). Valida con `@Valid/@Validated`.
+* `Config/`: `CorsConfig` (permite `localhost:3000`, `localhost:5173` y `https://*.vercel.app`, + `FRONTEND_URL` en Render; métodos `GET, POST, PUT, PATCH, DELETE, OPTIONS`) y `DataInitializer` (crea el admin y el analista semilla si no existen).
 * `Security/`: `JwtService` (firma y lee tokens), `JwtAuthenticationFilter` (lee el header Bearer y autentica la petición), `SecurityConfig` (reglas por rol + bean BCrypt), `RestAuthenticationEntryPoint` (`401`) y `RestAccessDeniedHandler` (`403`).
 * `Exceptions/`: `DuplicateResourceException`, `PesoTotalExcedeLimiteException`, `ResourceNotFoundException`, `CredencialesInvalidasException` y `GlobalExceptionHandler` (`400` validación, `401` credenciales, `404` no encontrado, `409` duplicado / suma de pesos excedida / conflicto de concurrencia).
 
@@ -83,6 +83,24 @@ Base local: `http://localhost:8080` — Producción: `https://scorecrediticiobac
 
 `GET https://scorecrediticiobackend.onrender.com/api/variables`
 * `200` -> lista todas las variables (activas e inactivas) ordenadas por nombre. También solo `ADMINISTRADOR`.
+
+### 5 Activar o inactivar una variable (solo `ADMINISTRADOR`)
+
+`PATCH https://scorecrediticiobackend.onrender.com/api/variables/{id}/estado`
+```json
+{ "estado": "Inactiva" }
+```
+Inactiva o reactiva una variable **sin eliminarla**: la fila sigue en el catálogo con su `id`, `nombre`, `peso` y `fechaRegistro`, así que no se pierde el historial de configuración.
+* `200` -> devuelve la variable completa con el `estado` nuevo (`"Activa"` o `"Inactiva"`). Acepta `"Activa"`/`"Inactiva"` y también `"ACTIVA"`/`"INACTIVA"`.
+  * Es **idempotente**: si la variable ya estaba en ese estado devuelve `200` sin volver a escribir nada, así que un doble clic o un reintento no falla.
+  * Al **inactivar**, su peso deja de sumar: se libera presupuesto para registrar variables nuevas.
+  * Al **reactivar**, su peso vuelve a contar y se revalida el límite del `100%` igual que en el alta.
+* `400` -> falta el campo `estado` o el valor no es `Activa`/`Inactiva` (tampoco si el `{id}` no es numérico).
+* `401` -> sin token válido.
+* `403` -> el rol es `ANALISTA` (este módulo es solo del `ADMINISTRADOR`).
+* `404` -> no existe una variable con ese `id`.
+* `409` -> al reactivar, la suma de los pesos de las activas superaría el `100%`. El cuerpo trae `pesoTotalActual`, `pesoSolicitado` y `pesoTotalResultante`, igual que el alta, y la variable **queda inactiva**.
+
 
 ### 5. Autenticación
 
@@ -179,6 +197,15 @@ const alta = await fetch(`${api}/api/variables`, {
 if (alta.status === 409) {
   const error = await alta.json(); // pesoTotalActual / pesoSolicitado / pesoTotalResultante
 }
+
+// Activar o inactivar sin borrar: el listado sigue mostrando la variable con su estado.
+const toggle = await fetch(`${api}/api/variables/${id}/estado`, {
+  method: 'PATCH', headers,
+  body: JSON.stringify({ estado: activar ? 'Activa' : 'Inactiva' })
+});
+if (toggle.status === 409) {
+  const error = await toggle.json(); // al reactivar, la suma de activas pasaria del 100%
+}
 ```
 
 ## Cómo conectarse al backend (frontend y pruebas)
@@ -191,6 +218,7 @@ if (alta.status === 409) {
    * `POST {{baseUrl}}/api/perfil-financiero` con `{tipoDocumento, numeroDocumento, ingresos, egresos}` -> esperas `201`.
    * `GET {{baseUrl}}/api/perfil-financiero?tipoDocumento=CC&numeroDocumento=12345678` -> esperas `200` con la ficha.
    * `POST {{baseUrl}}/api/variables` (con el token del **admin**) con `{"nombre":"Ingresos","tipoDato":"NUMERICO","peso":40}` -> esperas `201`; si mandas otro `40` sin ajustar, esperas `409` con el detalle de la suma.
+   * `PATCH {{baseUrl}}/api/variables/{{id}}/estado` (con el token del **admin**) con `{"estado":"Inactiva"}` -> esperas `200` con `"estado":"Inactiva"`; la variable sigue apareciendo en el `GET /api/variables`. Con `{"estado":"Activa"}` esperas `200` o `409` si la suma de activas se pasa del `100%`.
    * Sin token (o con token vencido) estas rutas responden `401`; con rol `ANALISTA` en rutas admin responden `403`.
    * En plan Free la primera petición puede tardar ~50s (el servicio se duerme). Reintenta si da timeout.
 2. **React (Vite) en Vercel:** define la variable de entorno:
@@ -238,6 +266,6 @@ if (alta.status === 409) {
 | nombre | varchar(100) UNIQUE NOT NULL | el backend además lo compara sin distinguir mayúsculas |
 | tipo_dato | varchar(20) NOT NULL | `NUMERICO`, `PORCENTAJE` o `CATEGORICO` (`@Enumerated(EnumType.STRING)`) |
 | peso | numeric(7,4) NOT NULL | `> 0` y `<= 100`; la suma de las activas no puede pasar de `100` |
-| estado | varchar(20) NOT NULL | `ACTIVA` o `INACTIVA`; sale como `"Activa"`/`"Inactiva"` en el JSON |
+| estado | varchar(20) NOT NULL | `ACTIVA` o `INACTIVA`; sale como `"Activa"`/`"Inactiva"` en el JSON. Solo la cambia `PATCH /api/variables/{id}/estado` |
 | fecha_registro | timestamp(6) NOT NULL | la assigns Hibernate (`@CreationTimestamp`) |
 
