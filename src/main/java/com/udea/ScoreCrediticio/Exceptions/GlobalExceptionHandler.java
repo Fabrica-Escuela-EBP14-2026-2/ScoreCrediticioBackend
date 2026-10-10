@@ -36,6 +36,23 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(SumaPesosInvalidaException.class)
+    public ProblemDetail handleSumaPesosInvalida(SumaPesosInvalidaException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Suma de pesos de la fórmula inválida");
+        problem.setProperty("totalCalculado", ex.getTotalCalculado());
+        problem.setProperty("diferencia", ex.getDiferencia());
+        problem.setProperty("tipoDescuadre", ex.getTipoDescuadre());
+        return problem;
+    }
+
+    @ExceptionHandler(FormulaInvalidaException.class)
+    public ProblemDetail handleFormulaInvalida(FormulaInvalidaException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Fórmula de scoring inválida");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,

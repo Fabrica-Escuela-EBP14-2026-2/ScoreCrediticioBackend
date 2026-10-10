@@ -26,10 +26,14 @@ public class VariableRiesgoService {
 
     private final VariableRiesgoDAO variableRiesgoDAO;
     private final VariableRiesgoMapper variableRiesgoMapper;
+    private final com.udea.ScoreCrediticio.DAOs.FormulaScoreDAO formulaScoreDAO;
 
-    public VariableRiesgoService(VariableRiesgoDAO variableRiesgoDAO, VariableRiesgoMapper variableRiesgoMapper) {
+    public VariableRiesgoService(VariableRiesgoDAO variableRiesgoDAO,
+            VariableRiesgoMapper variableRiesgoMapper,
+            com.udea.ScoreCrediticio.DAOs.FormulaScoreDAO formulaScoreDAO) {
         this.variableRiesgoDAO = variableRiesgoDAO;
         this.variableRiesgoMapper = variableRiesgoMapper;
+        this.formulaScoreDAO = formulaScoreDAO;
     }
 
     // SERIALIZABLE evita que dos altas concurrentes validen contra el mismo total
@@ -84,6 +88,17 @@ public class VariableRiesgoService {
             // asi que hay que revalidarlo igual que en el alta.
             if (nuevoEstado == EstadoVariable.ACTIVA) {
                 validarPresupuestoAlReactivar(variable);
+            } else if (nuevoEstado == EstadoVariable.INACTIVA && formulaScoreDAO != null) {
+                // Si la formula vigente contenia esta variable, se inactiva para no dejar una formula incompleta
+                formulaScoreDAO.findByVigenteTrue().ifPresent(formula -> {
+                    boolean contiene = formula.getPonderaciones().stream()
+                            .anyMatch(p -> p.getVariable().getId().equals(id));
+                    if (contiene) {
+                        formula.setVigente(false);
+                        formula.setClaveVigencia(null);
+                        formulaScoreDAO.saveAndFlush(formula);
+                    }
+                });
             }
 
             variable.setEstado(nuevoEstado);
