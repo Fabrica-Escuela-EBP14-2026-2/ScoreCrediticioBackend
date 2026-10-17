@@ -53,6 +53,30 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(RangosSolapadosException.class)
+    public ProblemDetail handleRangosSolapados(RangosSolapadosException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Rangos solapados");
+        problem.setProperty("camposConflicto", ex.getCamposConflicto());
+        problem.setProperty("nivelesConflicto", ex.getNivelesConflicto());
+        return problem;
+    }
+
+    @ExceptionHandler(BrechaEnEscalaException.class)
+    public ProblemDetail handleBrechaEnEscala(BrechaEnEscalaException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Brecha en la escala de riesgo");
+        problem.setProperty("intervalosSinCobertura", ex.getIntervalosSinCobertura());
+        return problem;
+    }
+
+    @ExceptionHandler(RangoInvalidoException.class)
+    public ProblemDetail handleRangoInvalido(RangoInvalidoException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Configuración de rangos inválida");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
