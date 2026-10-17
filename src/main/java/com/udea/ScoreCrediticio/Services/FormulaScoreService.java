@@ -134,6 +134,16 @@ public class FormulaScoreService {
 
     @Transactional(readOnly = true)
     public FormulaResponseDTO obtenerFormulaVigente() {
+        return mapearAResponse(obtenerFormulaVigenteValidada(), "Fórmula de scoring vigente");
+    }
+
+    /**
+     * Devuelve la formula vigente solo si esta completa: existe y ninguna de sus
+     * variables fue inactivada despues. La comparten la consulta administrativa (HU08)
+     * y el calculo de riesgo del solicitante (HU10).
+     */
+    @Transactional(readOnly = true)
+    public FormulaScore obtenerFormulaVigenteValidada() {
         FormulaScore formula = formulaScoreDAO.findByVigenteTrue()
                 .orElseThrow(() -> new ResourceNotFoundException("No hay una fórmula de scoring vigente en este momento"));
 
@@ -145,7 +155,7 @@ public class FormulaScoreService {
             throw new ResourceNotFoundException("No hay una fórmula de scoring vigente completa en este momento");
         }
 
-        return mapearAResponse(formula, "Fórmula de scoring vigente");
+        return formula;
     }
 
     /**

@@ -77,6 +77,13 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(CalculoRiesgoInvalidoException.class)
+    public ProblemDetail handleCalculoRiesgoInvalido(CalculoRiesgoInvalidoException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Cálculo de riesgo inválido");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,

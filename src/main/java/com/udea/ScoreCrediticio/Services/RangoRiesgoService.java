@@ -87,12 +87,11 @@ public class RangoRiesgoService {
     }
 
     /**
-     * Clasifica un puntaje (0-1000) en el nivel de riesgo que le corresponde segun
-     * la escala vigente. Es el objetivo de la historia: clasificar automaticamente
-     * la capacidad crediticia a partir de la puntuacion obtenida.
+     * Determina el nivel de riesgo de un puntaje (0-1000) segun la escala vigente.
+     * Lo usan la clasificacion directa (HU09) y el calculo de riesgo del solicitante (HU10).
      */
     @Transactional(readOnly = true)
-    public ClasificacionRiesgoResponseDTO clasificar(int puntaje) {
+    public NivelRiesgo determinarNivel(int puntaje) {
         if (puntaje < PUNTAJE_MINIMO_ESCALA || puntaje > PUNTAJE_MAXIMO_ESCALA) {
             throw new RangoInvalidoException(
                     "El puntaje a clasificar debe estar entre " + PUNTAJE_MINIMO_ESCALA + " y "
@@ -104,14 +103,23 @@ public class RangoRiesgoService {
             throw new ResourceNotFoundException(MENSAJE_SIN_ESCALA);
         }
 
-        NivelRiesgo nivel = rangos.stream()
+        return rangos.stream()
                 .filter(r -> puntaje >= r.getPuntajeMinimo() && puntaje <= r.getPuntajeMaximo())
                 .map(RangoRiesgo::getNivel)
                 .findFirst()
                 .orElseThrow(() -> new BrechaEnEscalaException(
                         "El puntaje " + puntaje + " no esta cubierto por la escala de niveles de riesgo vigente",
                         List.of(String.valueOf(puntaje))));
+    }
 
+    /**
+     * Clasifica un puntaje (0-1000) en el nivel de riesgo que le corresponde segun
+     * la escala vigente. Es el objetivo de la historia: clasificar automaticamente
+     * la capacidad crediticia a partir de la puntuacion obtenida.
+     */
+    @Transactional(readOnly = true)
+    public ClasificacionRiesgoResponseDTO clasificar(int puntaje) {
+        NivelRiesgo nivel = determinarNivel(puntaje);
         String mensaje = "Puntaje " + puntaje + " clasificado como riesgo " + nivel.getEtiqueta();
         return new ClasificacionRiesgoResponseDTO(puntaje, nivel, mensaje);
     }
