@@ -1,9 +1,13 @@
 package com.udea.ScoreCrediticio.Model;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,12 +18,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 /**
  * Registro historico de cada calculo de riesgo ejecutado por el Analista (HU10).
  * Cada vez que se presiona "Calcular Riesgo" se agrega una fila con el puntaje
- * obtenido, el nivel clasificado con la escala vigente y la fecha/hora del calculo.
+ * obtenido, el nivel clasificado con la escala vigente, la fecha/hora del calculo,
+ * el usuario evaluador y el snapshot de los datos usados (HU12).
  */
 @Entity
 @Table(name = "historial_evaluacion")
@@ -45,6 +52,19 @@ public class HistorialEvaluacion {
     @Column(name = "fecha_calculo", nullable = false, updatable = false)
     private LocalDateTime fechaCalculo;
 
+    @Column(name = "evaluador_email", length = 255)
+    private String evaluadorEmail;
+
+    @Column(name = "ingresos", precision = 19, scale = 2)
+    private BigDecimal ingresos;
+
+    @Column(name = "egresos", precision = 19, scale = 2)
+    private BigDecimal egresos;
+
+    @OneToMany(mappedBy = "historial", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
+    private List<VariableEvaluada> variables = new ArrayList<>();
+
     public HistorialEvaluacion() {
     }
 
@@ -52,6 +72,19 @@ public class HistorialEvaluacion {
         this.solicitante = solicitante;
         this.puntaje = puntaje;
         this.nivel = nivel;
+    }
+
+    public HistorialEvaluacion(Solicitante solicitante, Integer puntaje, NivelRiesgo nivel,
+            String evaluadorEmail, BigDecimal ingresos, BigDecimal egresos) {
+        this(solicitante, puntaje, nivel);
+        this.evaluadorEmail = evaluadorEmail;
+        this.ingresos = ingresos;
+        this.egresos = egresos;
+    }
+
+    public void agregarVariable(VariableEvaluada variable) {
+        variables.add(variable);
+        variable.setHistorial(this);
     }
 
     public Long getId() {
@@ -92,5 +125,37 @@ public class HistorialEvaluacion {
 
     public void setFechaCalculo(LocalDateTime fechaCalculo) {
         this.fechaCalculo = fechaCalculo;
+    }
+
+    public String getEvaluadorEmail() {
+        return evaluadorEmail;
+    }
+
+    public void setEvaluadorEmail(String evaluadorEmail) {
+        this.evaluadorEmail = evaluadorEmail;
+    }
+
+    public BigDecimal getIngresos() {
+        return ingresos;
+    }
+
+    public void setIngresos(BigDecimal ingresos) {
+        this.ingresos = ingresos;
+    }
+
+    public BigDecimal getEgresos() {
+        return egresos;
+    }
+
+    public void setEgresos(BigDecimal egresos) {
+        this.egresos = egresos;
+    }
+
+    public List<VariableEvaluada> getVariables() {
+        return variables;
+    }
+
+    public void setVariables(List<VariableEvaluada> variables) {
+        this.variables = variables;
     }
 }

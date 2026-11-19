@@ -2,6 +2,7 @@ package com.udea.ScoreCrediticio;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,6 +45,11 @@ class CalculoRiesgoIntegrationTest {
             + "{\"nivel\":\"Bajo\",\"min\":701,\"max\":1000},"
             + "{\"nivel\":\"Medio\",\"min\":301,\"max\":700},"
             + "{\"nivel\":\"Alto\",\"min\":0,\"max\":300}]}";
+
+    private static final String MENSAJE_DATOS_INCOMPLETOS =
+            "No es posible calcular el riesgo crediticio: el solicitante no cuenta con la información completa requerida para la evaluación";
+    private static final String MENSAJE_FORMULA_NO_VIGENTE =
+            "El sistema no cuenta con una fórmula de scoring vigente configurada. Contacte al Administrador de Riesgos";
 
     @Autowired
     private MockMvc mockMvc;
@@ -130,6 +136,37 @@ class CalculoRiesgoIntegrationTest {
     }
 
     @Test
+    void calculoUsaLaFormulaVigenteDeCadaMomento() throws Exception {
+        VariableRiesgo ingresos = crearVariable("Ingresos", "50.0000");
+        VariableRiesgo egresos = crearVariable("Egresos", "50.0000");
+        guardarEscala();
+
+        guardarFormula(ingresos, "50", egresos, "50");
+
+        // 100x50 + 0x50 = 5000; /10 = 500 puntos -> Medio.
+        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(),
+                cuerpoValores(v(ingresos, "100"), v(egresos, "0"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.puntaje").value(500))
+                .andExpect(jsonPath("$.nivel").value("Medio"));
+
+        // La nueva formula reemplaza a la anterior y el siguiente calculo la usa.
+        guardarFormula(ingresos, "20", egresos, "80");
+
+        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(),
+                cuerpoValores(v(ingresos, "100"), v(egresos, "0"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.puntaje").value(200))
+                .andExpect(jsonPath("$.nivel").value("Alto"));
+
+        assertEquals(2, historialEvaluacionDAO.count());
+        assertTrue(historialEvaluacionDAO.findAll().stream()
+                .anyMatch(registro -> registro.getPuntaje() == 500));
+        assertTrue(historialEvaluacionDAO.findAll().stream()
+                .anyMatch(registro -> registro.getPuntaje() == 200));
+    }
+
+    @Test
     void puntajeCeroEsAltoYPuntajeMilEsBajo() throws Exception {
         VariableRiesgo ingresos = crearVariable("Ingresos", "40.0000");
         VariableRiesgo egresos = crearVariable("Egresos", "35.0000");
@@ -210,7 +247,8 @@ class CalculoRiesgoIntegrationTest {
         mockMvc.perform(calcular(tokenAnalista, solicitante.getId(), cuerpoValores("1:80")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Recurso no encontrado"))
-                .andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("fórmula de scoring vigente")));
+                .andExpect(jsonPath("$.detail").value(MENSAJE_FORMULA_NO_VIGENTE))
+                .andExpect(jsonPath("$.codigo").value("FORMULA_NO_VIGENTE"));
 
         assertEquals(0, historialEvaluacionDAO.count());
     }
@@ -255,23 +293,86 @@ class CalculoRiesgoIntegrationTest {
                 cuerpoValores(v(ingresos, "80"), v(egresos, "60"), v(edad, "90"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Recurso no encontrado"))
-                .andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("vigente")));
+                .andExpect(jsonPath("$.detail").value(MENSAJE_FORMULA_NO_VIGENTE))
+                .andExpect(jsonPath("$.codigo").value("FORMULA_NO_VIGENTE"));
+
+        assertEquals(0, historialEvaluacionDAO.count());
+    }
+
+    // ---------- HU11: datos obligatorios y variables faltantes
+
+    @Test
+    void datosObligatoriosFaltantesDevuelve400ConCamposFaltantes() throws Exception {
+        VariableRiesgo ingresos = crearVariable("Ingresos", "40.0000");
+        VariableRiesgo egresos = crearVariable("Egresos", "35.0000");
+        VariableRiesgo edad = crearVariable("Edad", "25.0000");
+        guardarFormulaYEscala(ingresos, egresos, edad);
+
+        Solicitante incompleto = solicitanteDAO.save(
+                new Solicitante(null, null, null, null, null, null, null));
+
+        mockMvc.perform(calcular(tokenAnalista, incompleto.getId(),
+                cuerpoValores(v(ingresos, "80"), v(egresos, "60"), v(edad, "90"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Cálculo de riesgo inválido"))
+                .andExpect(jsonPath("$.detail").value(MENSAJE_DATOS_INCOMPLETOS))
+                .andExpect(jsonPath("$.codigo").value("DATOS_INCOMPLETOS"))
+                .andExpect(jsonPath("$.camposFaltantes", org.hamcrest.Matchers.contains(
+                        "tipoDocumento", "numeroDocumento", "nombre", "apellido", "telefono", "email")))
+                .andExpect(jsonPath("$.variablesFaltantes").isEmpty());
 
         assertEquals(0, historialEvaluacionDAO.count());
     }
 
     @Test
-    void faltanValoresDeVariablesDevuelve400() throws Exception {
+    void variablesFaltantesSeInformanEnElJson() throws Exception {
         VariableRiesgo ingresos = crearVariable("Ingresos", "40.0000");
         VariableRiesgo egresos = crearVariable("Egresos", "35.0000");
         VariableRiesgo edad = crearVariable("Edad", "25.0000");
         guardarFormulaYEscala(ingresos, egresos, edad);
 
         mockMvc.perform(calcular(tokenAnalista, solicitante.getId(),
-                cuerpoValores(v(ingresos, "80"), v(egresos, "60"))))
+                cuerpoValores(v(ingresos, "80"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Cálculo de riesgo inválido"))
-                .andExpect(jsonPath("$.detail", org.hamcrest.Matchers.containsString("Edad")));
+                .andExpect(jsonPath("$.detail").value(MENSAJE_DATOS_INCOMPLETOS))
+                .andExpect(jsonPath("$.codigo").value("DATOS_INCOMPLETOS"))
+                .andExpect(jsonPath("$.camposFaltantes").isEmpty())
+                .andExpect(jsonPath("$.variablesFaltantes", org.hamcrest.Matchers.contains(
+                        "Egresos", "Edad")));
+
+        assertEquals(0, historialEvaluacionDAO.count());
+    }
+
+    @Test
+    void valoresVaciosONulosCuentanComoVariablesFaltantes() throws Exception {
+        VariableRiesgo ingresos = crearVariable("Ingresos", "40.0000");
+        VariableRiesgo egresos = crearVariable("Egresos", "35.0000");
+        VariableRiesgo edad = crearVariable("Edad", "25.0000");
+        guardarFormulaYEscala(ingresos, egresos, edad);
+
+        // Lista vacia: faltan todas las variables de la formula.
+        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(), "{\"valores\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(MENSAJE_DATOS_INCOMPLETOS))
+                .andExpect(jsonPath("$.variablesFaltantes", org.hamcrest.Matchers.contains(
+                        "Ingresos", "Egresos", "Edad")));
+
+        // Valor null explicito: solo esa variable se reporta como faltante.
+        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(),
+                "{\"valores\":["
+                        + "{\"variableId\":" + ingresos.getId() + ",\"valor\":null},"
+                        + "{\"variableId\":" + egresos.getId() + ",\"valor\":60},"
+                        + "{\"variableId\":" + edad.getId() + ",\"valor\":90}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(MENSAJE_DATOS_INCOMPLETOS))
+                .andExpect(jsonPath("$.variablesFaltantes", org.hamcrest.Matchers.contains("Ingresos")));
+
+        // Sin el campo valores tambien se reportan todas las variables.
+        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(), "{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.variablesFaltantes", org.hamcrest.Matchers.contains(
+                        "Ingresos", "Egresos", "Edad")));
 
         assertEquals(0, historialEvaluacionDAO.count());
     }
@@ -314,15 +415,6 @@ class CalculoRiesgoIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Error de validación"));
 
-        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(),
-                cuerpoValores(v(ingresos, "null"), v(egresos, "60"), v(edad, "90"))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Error de validación"));
-
-        mockMvc.perform(calcular(tokenAnalista, solicitante.getId(), "{\"valores\":[]}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Error de validación"));
-
         assertEquals(0, historialEvaluacionDAO.count());
     }
 
@@ -345,6 +437,22 @@ class CalculoRiesgoIntegrationTest {
                         ingresos.getId(), egresos.getId(), edad.getId())))
                 .andExpect(status().isCreated());
 
+        guardarEscala();
+    }
+
+    private void guardarFormula(VariableRiesgo primera, String pesoPrimera,
+            VariableRiesgo segunda, String pesoSegunda) throws Exception {
+        mockMvc.perform(post("/api/formula")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(String.format("{\"ponderaciones\":["
+                        + "{\"variableId\":%d,\"peso\":%s},"
+                        + "{\"variableId\":%d,\"peso\":%s}]}",
+                        primera.getId(), pesoPrimera, segunda.getId(), pesoSegunda)))
+                .andExpect(status().isCreated());
+    }
+
+    private void guardarEscala() throws Exception {
         mockMvc.perform(post("/api/rangos")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)
                 .contentType(MediaType.APPLICATION_JSON)

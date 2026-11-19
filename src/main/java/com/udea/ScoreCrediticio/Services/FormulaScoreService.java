@@ -21,6 +21,7 @@ import com.udea.ScoreCrediticio.DTOs.Request.PonderacionItemRequestDTO;
 import com.udea.ScoreCrediticio.DTOs.Response.FormulaResponseDTO;
 import com.udea.ScoreCrediticio.DTOs.Response.PonderacionItemResponseDTO;
 import com.udea.ScoreCrediticio.Exceptions.FormulaInvalidaException;
+import com.udea.ScoreCrediticio.Exceptions.FormulaNoVigenteException;
 import com.udea.ScoreCrediticio.Exceptions.ResourceNotFoundException;
 import com.udea.ScoreCrediticio.Exceptions.SumaPesosInvalidaException;
 import com.udea.ScoreCrediticio.Model.EstadoVariable;
@@ -33,6 +34,8 @@ public class FormulaScoreService {
 
     private static final BigDecimal PESO_OBJETIVO = new BigDecimal("100.0000");
     private static final int ESCALA_PESO = 4;
+    private static final String MENSAJE_FORMULA_NO_VIGENTE =
+            "El sistema no cuenta con una fórmula de scoring vigente configurada. Contacte al Administrador de Riesgos";
 
     private final FormulaScoreDAO formulaScoreDAO;
     private final VariableRiesgoDAO variableRiesgoDAO;
@@ -147,15 +150,33 @@ public class FormulaScoreService {
         FormulaScore formula = formulaScoreDAO.findByVigenteTrue()
                 .orElseThrow(() -> new ResourceNotFoundException("No hay una fórmula de scoring vigente en este momento"));
 
-        // Si alguna variable de la formula vigente fue inactivada posteriormente, la formula ya no es completa
-        boolean algunaInactiva = formula.getPonderaciones().stream()
-                .anyMatch(p -> p.getVariable().getEstado() != EstadoVariable.ACTIVA);
-
-        if (algunaInactiva) {
+        if (!esFormulaCompleta(formula)) {
             throw new ResourceNotFoundException("No hay una fórmula de scoring vigente completa en este momento");
         }
 
         return formula;
+    }
+
+    /**
+     * Devuelve la formula vigente que se usara en el calculo del riesgo (HU11).
+     * Cuando no existe o esta incompleta, lanza la excepcion funcional que el
+     * Analista debe ver en la pantalla de evaluacion.
+     */
+    @Transactional(readOnly = true)
+    public FormulaScore obtenerFormulaVigenteParaCalculo() {
+        return formulaScoreDAO.findByVigenteTrue()
+                .filter(this::esFormulaCompleta)
+                .orElseThrow(() -> new FormulaNoVigenteException(MENSAJE_FORMULA_NO_VIGENTE));
+    }
+
+    /**
+     * Una formula es utilizable si tiene ponderaciones y ninguna de sus variables
+     * fue inactivada despues de su definicion.
+     */
+    private boolean esFormulaCompleta(FormulaScore formula) {
+        return !formula.getPonderaciones().isEmpty()
+                && formula.getPonderaciones().stream()
+                        .allMatch(p -> p.getVariable().getEstado() == EstadoVariable.ACTIVA);
     }
 
     /**

@@ -3,15 +3,14 @@ package com.udea.ScoreCrediticio.DTOs.Request;
 import java.util.List;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
 
 /**
- * Datos requeridos por el boton "Calcular Riesgo" (HU10): un valor 0-100 por
- * cada variable de la formula vigente.
+ * Datos requeridos por el boton "Calcular Riesgo" (HU10/HU11): un valor 0-100 por
+ * cada variable de la formula vigente. La lista puede llegar incompleta o vacia;
+ * el servicio se encarga de informar las variables faltantes.
  */
 public class CalcularRiesgoRequestDTO {
 
-    @NotEmpty(message = "La lista de valores de las variables no puede estar vacia")
     @Valid
     private List<ValorVariableRequestDTO> valores;
 

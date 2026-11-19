@@ -84,6 +84,24 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(DatosIncompletosException.class)
+    public ProblemDetail handleDatosIncompletos(DatosIncompletosException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Cálculo de riesgo inválido");
+        problem.setProperty("codigo", "DATOS_INCOMPLETOS");
+        problem.setProperty("camposFaltantes", ex.getCamposFaltantes());
+        problem.setProperty("variablesFaltantes", ex.getVariablesFaltantes());
+        return problem;
+    }
+
+    @ExceptionHandler(FormulaNoVigenteException.class)
+    public ProblemDetail handleFormulaNoVigente(FormulaNoVigenteException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Recurso no encontrado");
+        problem.setProperty("codigo", "FORMULA_NO_VIGENTE");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,

@@ -15,7 +15,7 @@ public class ValorVariableRequestDTO {
     @NotNull(message = "El id de la variable es obligatorio")
     private Long variableId;
 
-    @NotNull(message = "El valor de la variable es obligatorio")
+    // Un valor null se trata como variable faltante y se informa en el JSON.
     @DecimalMin(value = "0", message = "El valor de la variable no puede ser menor que 0")
     @DecimalMax(value = "100", message = "El valor de la variable no puede superar 100")
     private BigDecimal valor;
