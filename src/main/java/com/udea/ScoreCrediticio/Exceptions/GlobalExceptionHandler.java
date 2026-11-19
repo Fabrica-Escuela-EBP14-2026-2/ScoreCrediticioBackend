@@ -16,6 +16,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import jakarta.validation.ConstraintViolationException;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -23,6 +25,9 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleDuplicate(DuplicateResourceException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Recurso duplicado");
+        if (ex.getCampo() != null) {
+            problem.setProperty("campo", ex.getCampo());
+        }
         return problem;
     }
 
@@ -169,6 +174,24 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleMissingParam(MissingServletRequestParameterException ex) {
         Map<String, String> errors = new HashMap<>();
         errors.put(ex.getParameterName(), "El parámetro es obligatorio");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "La solicitud contiene datos inválidos");
+        problem.setTitle("Error de validación");
+        problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getConstraintViolations().forEach(violation -> {
+            String path = violation.getPropertyPath().toString();
+            String field = path.contains(".")
+                    ? path.substring(path.lastIndexOf('.') + 1)
+                    : path;
+            errors.put(field.isBlank() ? "parametro" : field, violation.getMessage());
+        });
+
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST, "La solicitud contiene datos inválidos");
         problem.setTitle("Error de validación");

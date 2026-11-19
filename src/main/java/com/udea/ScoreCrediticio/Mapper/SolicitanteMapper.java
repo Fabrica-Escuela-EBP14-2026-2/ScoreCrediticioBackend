@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import com.udea.ScoreCrediticio.DTOs.Request.SolicitanteRequestDTO;
 import com.udea.ScoreCrediticio.DTOs.Response.SolicitanteResponseDTO;
 import com.udea.ScoreCrediticio.Model.Solicitante;
+import com.udea.ScoreCrediticio.Security.SanitizadorTexto;
 
 
 @Component 
@@ -14,8 +15,10 @@ public class SolicitanteMapper {
         Solicitante solicitante = new Solicitante();
         solicitante.setTipoDocumento(dto.getTipoDocumento());
         solicitante.setNumeroDocumento(dto.getNumeroDocumento());
-        solicitante.setNombre(dto.getNombre());
-        solicitante.setApellido(dto.getApellido());
+        // Refuerzo: aunque el DTO ya viene sanitizado por Jackson, cualquier
+        // construccion interna del DTO pasa por la misma limpieza antes de persistir.
+        solicitante.setNombre(SanitizadorTexto.limpiarNombre(dto.getNombre()));
+        solicitante.setApellido(SanitizadorTexto.limpiarNombre(dto.getApellido()));
         solicitante.setTelefono(dto.getTelefono());
         solicitante.setEmail(dto.getEmail());
         return solicitante;

@@ -9,8 +9,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
+@Table(name = "solicitante", uniqueConstraints = @UniqueConstraint(
+        name = "uk_solicitante_documento",
+        columnNames = {"tipo_documento", "numero_documento"}))
 public class Solicitante {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
