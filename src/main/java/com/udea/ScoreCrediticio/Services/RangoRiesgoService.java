@@ -3,7 +3,9 @@ package com.udea.ScoreCrediticio.Services;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -66,15 +68,31 @@ public class RangoRiesgoService {
         validarSinBrechas(ordenados);
         validarNiveles(rangos);
 
-        // Reemplazo atomico de la escala: solo existe una escala vigente a la vez.
-        rangoRiesgoDAO.deleteAllInBatch();
+        // Actualizacion por nivel (upsert): conserva los ids y permite que los eventos
+        // de Hibernate registren en la bitacora el puntaje anterior y el nuevo.
+        Map<NivelRiesgo, RangoRiesgo> existentes = rangoRiesgoDAO.findAll().stream()
+                .collect(Collectors.toMap(RangoRiesgo::getNivel, r -> r));
 
-        List<RangoRiesgo> nuevas = rangos.stream()
-                .map(r -> new RangoRiesgo(r.getNivel(), r.getMin(), r.getMax()))
-                .toList();
-        List<RangoRiesgo> guardadas = rangoRiesgoDAO.saveAll(nuevas);
+        List<RangoRiesgo> guardadas = new ArrayList<>();
+        for (RangoItemRequestDTO item : rangos) {
+            RangoRiesgo rango = existentes.remove(item.getNivel());
+            if (rango == null) {
+                rango = new RangoRiesgo(item.getNivel(), item.getMin(), item.getMax());
+            } else {
+                rango.setPuntajeMinimo(item.getMin());
+                rango.setPuntajeMaximo(item.getMax());
+            }
+            guardadas.add(rango);
+        }
 
-        return new EscalaRiesgoResponseDTO(MENSAJE_GUARDADO, mapear(guardadas));
+        // Defensivo: con la validacion de los tres niveles no deberia quedar ninguno.
+        if (!existentes.isEmpty()) {
+            rangoRiesgoDAO.deleteAll(existentes.values());
+        }
+
+        List<RangoRiesgo> persistidas = rangoRiesgoDAO.saveAll(guardadas);
+
+        return new EscalaRiesgoResponseDTO(MENSAJE_GUARDADO, mapear(persistidas));
     }
 
     @Transactional(readOnly = true)
