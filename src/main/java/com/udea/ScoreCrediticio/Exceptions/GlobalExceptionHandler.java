@@ -107,6 +107,20 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(RangoFechasInvalidoException.class)
+    public ProblemDetail handleRangoFechasInvalido(RangoFechasInvalidoException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Rango de fechas inválido");
+        return problem;
+    }
+
+    @ExceptionHandler(FormatoReporteInvalidoException.class)
+    public ProblemDetail handleFormatoReporteInvalido(FormatoReporteInvalidoException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Formato de reporte inválido");
+        return problem;
+    }
+
     @ExceptionHandler(ConcurrencyFailureException.class)
     public ProblemDetail handleConcurrencia(ConcurrencyFailureException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
