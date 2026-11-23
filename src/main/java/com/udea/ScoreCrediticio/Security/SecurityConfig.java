@@ -48,7 +48,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/variables/**", "/api/formula/**", "/api/rangos/**",
-                                "/api/auditoria", "/api/auditoria/**")
+                                "/api/auditoria", "/api/auditoria/**",
+                                "/api/dashboard/**", "/api/reportes/**")
                                 .hasRole("ADMINISTRADOR")
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception
