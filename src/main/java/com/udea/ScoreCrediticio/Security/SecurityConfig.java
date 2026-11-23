@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/variables")
+                                .hasAnyRole("ADMINISTRADOR", "ANALISTA")
                         .requestMatchers("/api/variables/**", "/api/formula/**", "/api/rangos/**",
                                 "/api/auditoria", "/api/auditoria/**",
                                 "/api/dashboard/**", "/api/reportes/**")
